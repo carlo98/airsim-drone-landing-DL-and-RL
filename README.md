@@ -3,3 +3,5 @@ Airsim multirotor landing in two phases using deep reinforcement learning and de
 
 droneRL_landingVerticalLidar.py is based on the RL code found here: https://adventuresinmachinelearning.com/reinforcement-learning-tensorflow/
 
+Airsim repo: https://github.com/microsoft/AirSim
+
