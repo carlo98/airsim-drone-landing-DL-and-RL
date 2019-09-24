@@ -11,7 +11,7 @@ NUM_EPISODES = 100
 
 #load pre-trained model
 def load_trained_model():
-    loaded_model = tf_load_model("./models/modelVerticalNN.h5")
+    loaded_model = tf_load_model("./models/modelVerticalNN_2.h5")
     print("Model restored.")
     return loaded_model
 
