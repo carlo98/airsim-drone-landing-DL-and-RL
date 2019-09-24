@@ -98,6 +98,9 @@ def testNetworks():
     
         while True and step < 40:
 
+            #Stop and study data
+            client.moveByVelocityAsync(0, 0, -0.0, 5)
+
             #Horizontal movement
             if not trigger_hor:
                 current_position = client.getMultirotorState().kinematics_estimated.position
