@@ -7,22 +7,24 @@ import os
 import math
 import pickle
 
-BATCH_SIZE = 256
+BATCH_SIZE = 128
 MIN_ALTITUDE = 5
 MAX_ALTITUDE = 10
 MIN_EPSILON = 0.001
-MAX_EPSILON = 0.2
-LAMBDA = 0.01
-GAMMA = 0.70
+MAX_EPSILON = 0.4
+LAMBDA = 0.001
+GAMMA = 0.85
 OBSERVE = 20
+EXE_TIME = 0.1
 
-def reward(client, quad_state, trigger, actual_episode_length, max_episode_length, new_vel_z):
+tf.compat.v1.disable_eager_execution()
 
-    height = np.abs(quad_state[2])
+def reward(client, height, trigger, actual_episode_length, max_episode_length, new_vel_z):
+
     reward = 0.0
-    collision_info = client.simGetCollisionInfo()
+    #collision_info = client.simGetCollisionInfo() Not reliable for landing
 
-    if collision_info.has_collided or (height <= 0.2 and new_vel_z > 0.8):
+    if height <= 0.2 and new_vel_z > 0.8:
         reward = -10.0
     else:
         if height <= 0.2 and trigger == 1:
@@ -109,11 +111,10 @@ class Model:
         self._states = tf.compat.v1.placeholder(shape=[None, self._num_states], dtype=tf.float32)
         self._q_s_a = tf.compat.v1.placeholder(shape=[None, self._num_actions], dtype=tf.float32)
         # create a couple of fully connected hidden layers
-        fc1 = tf.layers.dense(self._states, 64, activation=tf.nn.relu)
-        fc2 = tf.layers.dense(fc1, 64, activation=tf.nn.relu)
-        fc3 = tf.layers.dense(fc2, 32, activation=tf.nn.relu)
-        fc4 = tf.layers.dense(fc3, 16, activation=tf.nn.relu)
-        self._logits = tf.layers.dense(fc4, self._num_actions)
+        fc1 = tf.compat.v1.layers.dense(self._states, 64, activation=tf.nn.relu)
+        fc2 = tf.compat.v1.layers.dense(fc1, 64, activation=tf.nn.relu)
+        fc3 = tf.compat.v1.layers.dense(fc2, 32, activation=tf.nn.relu)
+        self._logits = tf.compat.v1.layers.dense(fc2, self._num_actions)
         loss = tf.compat.v1.losses.mean_squared_error(self._q_s_a, self._logits)
         self._optimizer = tf.compat.v1.train.AdamOptimizer().minimize(loss)
         self._var_init = tf.compat.v1.global_variables_initializer()
@@ -182,8 +183,8 @@ class GameRunner:
             #Taking action index
 
             #At least same of the initial experiences are positive
-            if self._memory.get_len() <= OBSERVE*(self.episode_length)/4 or cnt % 4 == 0:
-                if z_val <= 0.3:
+            if self._memory.get_len() <= OBSERVE*(self.episode_length)/4:
+                if z_val <= 0.2:
                     action_index = 3
                 elif z_val >= 4:
                     action_index = 2
@@ -208,12 +209,10 @@ class GameRunner:
             print("  ====== moving at (" + str(new_vel_x) + " " + str(new_vel_y) + " " + str(new_vel_z)  + "), trigger ",trigger)
             client.moveByVelocityAsync(new_vel_x, new_vel_y, new_vel_z, 1).join()
 
-            time.sleep(0.1)
+            time.sleep(EXE_TIME)
 
             new_state = client.getLidarData().pose.position.z_val
-            drone_position = client.getMultirotorState().kinematics_estimated.position
-            current_position = [drone_position.x_val,drone_position.y_val,drone_position.z_val]
-            reward_current = reward(client,current_position,trigger, j, episode_length, new_vel_z)
+            reward_current = reward(client, new_state, trigger, j, episode_length, new_vel_z)
 
             self._memory.add_sample((curr_state, action_index, reward_current, new_state))    
 
@@ -286,15 +285,15 @@ if __name__ == "__main__":
         mem, already_saved = store_transition(mem,'read')
 
         sess.run(tf.compat.v1.global_variables_initializer())
-        checkpoint = tf.train.get_checkpoint_state("saved_networks/verticalOpt/")
+        checkpoint = tf.train.get_checkpoint_state(os.path.join("saved_networks","verticalOpt"))
         print('checkpoint:', checkpoint)
         if checkpoint and checkpoint.model_checkpoint_path:
             trainable_saver.restore(sess, checkpoint.model_checkpoint_path)
             already_saved = True
             print("Successfully loaded:", checkpoint.model_checkpoint_path)
         else:
-            if not os.path.exists("saved_networks/verticalOpt"):
-                os.mkdir("saved_networks/verticalOpt")
+            if not os.path.exists(os.path.join("saved_networks","verticalOpt")):
+                os.mkdir(os.path.join("saved_networks","verticalOpt"))
                 print('The file not exists, is created successfully')
             already_saved = False
             print("Could not find old network weights")
@@ -324,7 +323,7 @@ if __name__ == "__main__":
                     gr._steps += 1
                     gr._eps = MIN_EPSILON + (MAX_EPSILON - MIN_EPSILON) \
                                   * math.exp(-LAMBDA * gr._steps)
-                    trainable_saver.save(sess, "saved_networks/verticalOpt/Simply_maze",global_step=cnt,write_state=True)
+                    trainable_saver.save(sess, os.path.join("saved_networks","verticalOpt","Simply_maze"),global_step=cnt,write_state=True)
                     print('######## The mode has been saved successfully after %d episodes ##########' % cnt)
                
             cnt += 1
